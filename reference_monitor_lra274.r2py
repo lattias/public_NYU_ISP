@@ -1,0 +1,98 @@
+"""
+ISP Assignment 2
+Lior Attias
+
+Security Layer:
+  This security layer creates ABopenfile call which wraps the repy2 API
+""" 
+TYPE="type"
+ARGS="args"
+RETURN="return"
+EXCP="exceptions"
+TARGET="target"
+FUNC="func"
+OBJC="objc"
+
+class ABFile():
+  def __init__(self,filename,create):
+    # globals
+    mycontext['debug'] = False  
+    exists = False 
+    # local (per object) reference to the underlying file
+    self.Afn = filename+'.a'
+    self.Bfn = filename+'.b'
+
+    self.lock = createlock()
+    self.lock.acquire(True)
+    try:
+      if self.Afn in listfiles():
+        exists = True
+
+      # make the files and add 'SE' to the readat file...
+      self.Afile = openfile(self.Afn,create)
+      self.Bfile = openfile(self.Bfn,create)
+
+      if create and not exists:
+        self.Afile.writeat('SE',0)
+        self.Bfile.writeat('SE',0)
+    except:
+      log()
+    finally:
+      self.lock.release() 
+
+  def writeat(self,data,offset): 
+    # Write the requested data to the B file using the sandbox's writeat call
+    self.lock.acquire(True)
+    try:
+      self.Bfile.writeat(data,offset)
+    except:
+      log()
+    finally:
+      self.lock.release()
+  
+  def readat(self,bytes,offset):
+    # Read from the A file using the sandbox's readat...
+    contents = ""
+    self.lock.acquire(True)
+    try:
+      contents = self.Afile.readat(bytes,offset)
+    except:
+      log()
+    finally:
+      self.lock.release()
+      return contents
+       
+
+  def close(self):
+    self.lock.acquire(True)
+    try:
+      write_file_content = self.Bfile.readat(None, 0)
+      if (len(write_file_content) > 1 and write_file_content[0] == 'S' and write_file_content[-1] == 'E'):
+        self.Afile.writeat(write_file_content, 0)
+
+      self.Afile.close()
+      self.Bfile.close()
+    except:
+      log()
+    finally:
+      self.lock.release()
+
+def ABopenfile(filename, create):
+  return ABFile(filename,create)
+
+
+
+
+# The code here sets up type checking and variable hiding for you.  You
+# should not need to change anything below here.
+sec_file_def = {"obj-type":ABFile,
+                "name":"ABFile",
+                "writeat":{"type":"func","args":(str,(int,long)),"exceptions":Exception,"return":(int,type(None)),"target":ABFile.writeat},
+                "readat":{"type":"func","args":((int,long,type(None)),(int,long)),"exceptions":Exception,"return":str,"target":ABFile.readat},
+                "close":{"type":"func","args":None,"exceptions":None,"return":(bool,type(None)),"target":ABFile.close}
+           }
+
+CHILD_CONTEXT_DEF["ABopenfile"] = {TYPE:OBJC,ARGS:(str,bool),EXCP:Exception,RETURN:sec_file_def,TARGET:ABopenfile}
+
+# Execute the user code
+secure_dispatch_module()
